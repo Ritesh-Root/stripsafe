@@ -70,7 +70,7 @@ flowchart LR
 - **Matcher:** confusion twins cost nothing (0/O, 1/I/l, 5/S, 8/B, 2/Z). A real one-character edit is not enough on its own. Manufacturer and product names have to agree before a near miss is treated as the listed batch. A different company that reused a batch code does not get flagged when both names are present and disagree.
 - **Cabinet:** scans stay on the device in IndexedDB, with a localStorage copy. Opening the app re-checks them against `data/alerts.json`. A batch that was clear at scan time and is named by a later list is marked “newly flagged since you scanned”.
 - **Chemist mode:** a CSV purchase invoice is matched with the same function. Flagged lines become a quarantine list that can be exported as a PDF.
-- **Ingester:** `scripts/ingest.ts` asks the public CDSCO JSON endpoints for every year and month, normalizes the rows, and writes `data/alerts.json` plus `data/diff-latest.json` (rows whose ids were not in the previous file). A failed fetch does not wipe a snapshot that already has rows. The weekly workflow commits the diff. Pages deploys that snapshot with the PWA.
+- **Ingester:** `scripts/ingest.ts` asks the public CDSCO JSON endpoints for every year and month, normalizes the rows, and writes `data/alerts.json` plus `data/diff-latest.json` (rows whose ids were not in the previous file). A failed fetch does not wipe a snapshot that already has rows. The weekly workflow commits those two files. At dev and build time Vite writes a compact copy to `public/data/alerts.json` (empty strings omitted, values unchanged). The PWA fetches that file with the site base path. It is not imported into the JavaScript bundle. The service worker keeps a StaleWhileRevalidate copy so a later visit works offline.
 
 ## Data sources
 
@@ -97,7 +97,7 @@ NSQ row fields: `str_product_name`, `str_brand_name`, `str_batch_no`, `dt_manufa
 
 Lists are monthly. The September 2026 list was out by 23 Oct 2026, so a new month usually lands three to four weeks after it ends. The GitHub Action runs weekly, fetches every published month, and commits only the rows that are new since the previous snapshot.
 
-**Snapshot in this repo.** Refreshed 25 Nov 2026: **6,975 real CDSCO rows** (6,926 NSQ + 49 spurious) covering all 93 published months, JAN-2019 through SEP-2026 (331 rows in SEP-2026). The ingester retries with backoff and merges with the previous snapshot, so a flaky connection never drops months. The weekly GitHub Action adds new months as CDSCO publishes them.
+**Snapshot in this repo.** Refreshed 25 Nov 2026: **6,975 real CDSCO rows** (6,926 NSQ + 49 spurious) covering all 93 published months, JAN-2019 through SEP-2026 (331 rows in SEP-2026). The committed file is `data/alerts.json`. The site loads a compact copy from `/stripsafe/data/alerts.json` after the app starts, instead of bundling the list into JavaScript. The ingester retries with backoff and merges with the previous snapshot, so a flaky connection never drops months. The weekly GitHub Action commits `data/alerts.json` and `data/diff-latest.json`; the Pages build publishes the compact copy.
 
 ## Tech stack
 
@@ -108,7 +108,7 @@ Lists are monthly. The September 2026 list was out by 23 Oct 2026, so a new mont
 | OCR | tesseract.js in the browser | No server and no paid OCR key. Unsure characters are shown for a tap |
 | Matching | Confusion-aware edit distance in `src/lib/match.ts` | 0/O, 1/I/l, 5/S, 8/B, 2/Z cost nothing; manufacturer and product scores block false alarms |
 | Cabinet | IndexedDB, mirrored to localStorage | Stays on the device. Re-checked against the snapshot when the app opens |
-| Ingester | `scripts/ingest.ts` (Node 22 fetch) | Public CDSCO JSON, Latin-1 / windows-1252 decode, weekly diff |
+| Ingester | `scripts/ingest.ts` (Node 22 fetch) | Public CDSCO JSON, Latin-1 / windows-1252 decode, weekly diff into `data/alerts.json` |
 | Hosting | GitHub Actions + GitHub Pages | `https://ritesh-root.github.io/stripsafe/` |
 
 No paid APIs. Every data source is public.
