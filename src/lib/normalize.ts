@@ -96,6 +96,31 @@ export function diffAlerts(previous: AlertRow[], next: AlertRow[]): AlertRow[] {
   return next.filter((row) => !known.has(row.id))
 }
 
+/** Keep previous rows for month+kind keys that were not freshly fetched. Prefer collected rows when ids collide. */
+export function mergeAlertRows(
+  previous: AlertRow[],
+  collected: AlertRow[],
+  successfulKeys: Iterable<string>,
+): AlertRow[] {
+  const fetched = new Set([...successfulKeys].map((key) => key.toUpperCase()))
+  const seen = new Set<string>()
+  const out: AlertRow[] = []
+  const keyOf = (row: AlertRow) => `${row.kind}|${row.month}`.toUpperCase()
+
+  for (const row of collected) {
+    if (seen.has(row.id)) continue
+    seen.add(row.id)
+    out.push(row)
+  }
+  for (const row of previous) {
+    if (seen.has(row.id)) continue
+    if (fetched.has(keyOf(row))) continue
+    seen.add(row.id)
+    out.push(row)
+  }
+  return out
+}
+
 export function sortedMonths(rows: AlertRow[]): string[] {
   return [...new Set(rows.map((row) => row.month).filter(Boolean))].sort((a, b) => monthSortKey(a) - monthSortKey(b))
 }
