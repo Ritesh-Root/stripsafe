@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-11-25T00:31:44.450Z",
+  "sourceBase": "https://cdscoonline.gov.in/CDSCO",
+  "rowCount": 0,
+  "months": [],
+  "errors": [
+    {
+      "url": "https://cdscoonline.gov.in/CDSCO/reportingYears?tab=nsq",
+      "message": "fetch failed: Connect Timeout Error (attempted address: cdscoonline.gov.in:443, timeout: 10000ms)"
+    }
+  ],
+  "rows": []
+}
