@@ -4,9 +4,10 @@ import { Button } from '@astryxdesign/core/Button'
 import { Pill } from 'lucide-react'
 
 import { ThemeButton } from '../components/Shell'
+import { useAlerts } from '../lib/AlertsContext'
 import type { CabinetItem } from '../lib/types'
 import { labelMonth, latestMonth } from '../lib/normalize'
-import { nsqCount, snapshot, spuriousCount } from '../lib/snapshot'
+import { snapshotCounts } from '../lib/snapshot'
 
 type Props = {
   theme: 'light' | 'dark'
@@ -22,7 +23,10 @@ function scannedLabel(iso: string): string {
 }
 
 export function HomeScreen({ theme, onToggleTheme, items, onScan, onType, onOpen }: Props) {
-  const latest = latestMonth(snapshot.rows)
+  const alerts = useAlerts()
+  const snapshot = alerts.snapshot
+  const counts = snapshot ? snapshotCounts(snapshot) : { nsq: 0, spurious: 0 }
+  const latest = snapshot ? latestMonth(snapshot.rows) : ''
   const recent = items.slice(0, 3)
   return (
     <>
@@ -43,21 +47,22 @@ export function HomeScreen({ theme, onToggleTheme, items, onScan, onType, onOpen
         <Button label="Scan a strip" variant="primary" width="100%" onClick={onScan} />
         <Button label="Type the batch number" variant="secondary" width="100%" onClick={onType} />
       </div>
-      {snapshot.rowCount === 0 ? (
+      {alerts.status === 'ready' && snapshot && snapshot.rowCount === 0 ? (
         <Banner
           status="warning"
-          title="CDSCO portal didn't respond"
-          description="This snapshot has no rows. The public CDSCO site stalled before any list could be saved, and nothing was invented. A check can only say that no loaded alert names the batch."
+          title="CDSCO snapshot has no rows"
+          description="The list loaded, and it does not name any batches. Nothing was invented."
           collapsible={false}
         />
-      ) : (
+      ) : null}
+      {alerts.status === 'ready' && snapshot && snapshot.rowCount > 0 ? (
         <Banner
           status="info"
           title={`Latest CDSCO list: ${labelMonth(latest)}`}
-          description={`${nsqCount} not-of-standard-quality and ${spuriousCount} spurious rows are in this snapshot. Your cabinet is re-checked when the app opens.`}
+          description={`${counts.nsq} not-of-standard-quality and ${counts.spurious} spurious rows are in this snapshot. Your cabinet is re-checked when the app opens.`}
           collapsible={false}
         />
-      )}
+      ) : null}
       <h2 className="section">Recent scans</h2>
       {recent.length === 0 ? (
         <p className="supporting empty">No scans yet. A strip you check is saved on this phone.</p>

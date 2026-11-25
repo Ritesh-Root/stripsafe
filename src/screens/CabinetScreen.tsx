@@ -4,9 +4,9 @@ import { useState } from 'react'
 
 import { StatusBadge } from './HomeScreen'
 import { ThemeButton } from '../components/Shell'
+import { useAlerts } from '../lib/AlertsContext'
 import type { CabinetItem } from '../lib/types'
-import { labelMonth, nextMonthLabel } from '../lib/normalize'
-import { latestListMonth } from '../lib/snapshot'
+import { labelMonth, latestMonth, nextMonthLabel } from '../lib/normalize'
 import { newlyFlaggedTitle } from '../lib/wording'
 
 type Filter = 'all' | 'flagged' | 'watching'
@@ -24,7 +24,8 @@ export function CabinetScreen({ items, theme, onToggleTheme, onOpen }: Props) {
   const watching = items.filter((item) => item.currentStatus !== 'flagged')
   const visible = filter === 'flagged' ? flagged : filter === 'watching' ? watching : items
   const fresh = items.filter((item) => item.newlyFlagged)
-  const latest = latestListMonth()
+  const alerts = useAlerts()
+  const latest = alerts.snapshot ? latestMonth(alerts.snapshot.rows) : ''
   const next = latest ? nextMonthLabel(latest) : null
 
   return (

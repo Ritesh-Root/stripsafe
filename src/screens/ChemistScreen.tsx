@@ -4,17 +4,19 @@ import { Pill, Upload } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { ThemeButton } from '../components/Shell'
+import { useAlerts } from '../lib/AlertsContext'
 import { parseInvoice, type InvoiceLine } from '../lib/csv'
 import { matchBatch, type MatchOutcome } from '../lib/match'
 import { labelMonth } from '../lib/normalize'
 import { downloadPdf } from '../lib/pdf'
-import { alertIndex } from '../lib/snapshot'
 
 type Checked = InvoiceLine & { outcome: MatchOutcome }
 
 const PHARMACY_KEY = 'stripsafe.pharmacy'
 
 export function ChemistScreen({ theme, onToggleTheme }: { theme: 'light' | 'dark'; onToggleTheme: () => void }) {
+  const alerts = useAlerts()
+  const index = alerts.index
   const [pharmacy, setPharmacy] = useState(() => localStorage.getItem(PHARMACY_KEY) ?? '')
   const [fileName, setFileName] = useState('')
   const [lines, setLines] = useState<Checked[]>([])
@@ -23,6 +25,7 @@ export function ChemistScreen({ theme, onToggleTheme }: { theme: 'light' | 'dark
   const review = useMemo(() => lines.filter((line) => line.outcome.status === 'review'), [lines])
 
   function onFile(file: File) {
+    if (!index) return
     setFileName(file.name)
     file.text().then((text) => {
       const parsed = parseInvoice(text)
@@ -33,7 +36,7 @@ export function ChemistScreen({ theme, onToggleTheme }: { theme: 'light' | 'dark
           product: line.product,
           brand: line.brand,
           manufacturer: line.manufacturer,
-        }, alertIndex),
+        }, index ?? { byKey: new Map(), count: 0, months: [] }),
       })))
     }).catch(() => setLines([]))
   }
@@ -42,7 +45,7 @@ export function ChemistScreen({ theme, onToggleTheme }: { theme: 'light' | 'dark
     const header = [
       'StripSafe quarantine list',
       pharmacy || 'Pharmacy',
-      `${lines.length} invoice lines checked against ${alertIndex.count} loaded CDSCO rows`,
+      `${lines.length} invoice lines checked against ${index?.count ?? 0} loaded CDSCO rows`,
       quarantine.length === 0 ? 'No CDSCO alert names these batches yet.' : `${quarantine.length} batches to quarantine`,
       '',
     ]

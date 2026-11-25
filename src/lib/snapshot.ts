@@ -1,22 +1,43 @@
-import snapshotJson from '../../data/alerts.json'
-import { buildIndex, type AlertIndex } from './match'
+import type { AlertIndex } from './match'
+import { hydrateSnapshot } from './publish'
 import type { AlertSnapshot } from './types'
-import { latestMonth, sortedMonths } from './normalize'
 
-export const snapshot = snapshotJson as AlertSnapshot
-
-export const alertIndex: AlertIndex = buildIndex(snapshot.rows)
-
-export function monthSpan(): string {
-  const months = sortedMonths(snapshot.rows)
-  if (months.length === 0) return ''
-  if (months.length === 1) return months[0] ?? ''
-  return `${months[0]} – ${months[months.length - 1]}`
+export function alertsUrl(): string {
+  const base = import.meta.env.BASE_URL || '/'
+  return `${base}data/alerts.json`
 }
 
-export function latestListMonth(): string {
-  return latestMonth(snapshot.rows)
+let inflight: Promise<AlertSnapshot> | null = null
+
+export function resetSnapshotCache(): void {
+  inflight = null
 }
 
-export const nsqCount = snapshot.rows.filter((row) => row.kind === 'nsq').length
-export const spuriousCount = snapshot.rows.filter((row) => row.kind === 'spurious').length
+/** Fetch the snapshot as a static file. The service worker may answer from cache. */
+export function loadSnapshot(): Promise<AlertSnapshot> {
+  if (!inflight) {
+    const request = fetch(alertsUrl())
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`CDSCO list responded ${response.status}`)
+        return hydrateSnapshot(await response.json())
+      })
+      .catch((error: unknown) => {
+        if (inflight === request) inflight = null
+        throw error instanceof Error ? error : new Error('CDSCO list failed to load')
+      })
+    inflight = request
+  }
+  return inflight
+}
+
+export function snapshotCounts(snapshot: AlertSnapshot): { nsq: number; spurious: number } {
+  let nsq = 0
+  let spurious = 0
+  for (const row of snapshot.rows) {
+    if (row.kind === 'spurious') spurious += 1
+    else nsq += 1
+  }
+  return { nsq, spurious }
+}
+
+export type { AlertIndex }

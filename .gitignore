@@ -29,6 +29,9 @@ venv/
 *.pem
 *.key
 
+# Generated at dev/build from data/alerts.json. Not a second copy of the snapshot.
+public/data/
+
 # Local data (CDSCO snapshots, SQLite index, uploads)
 data/raw/
 data/*.sqlite

@@ -2,9 +2,10 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Bell, Shield, TriangleAlert } from 'lucide-react'
 
+import { useAlerts } from '../lib/AlertsContext'
 import type { MatchOutcome } from '../lib/match'
 import { labelMonth } from '../lib/normalize'
-import { nsqCount, snapshot, spuriousCount } from '../lib/snapshot'
+import { snapshotCounts } from '../lib/snapshot'
 import type { Draft } from '../lib/types'
 import { clearHeadline, flaggedHeadline, newlyFlaggedTitle } from '../lib/wording'
 
@@ -19,6 +20,9 @@ type Props = {
 }
 
 export function ResultScreen({ draft, outcome, newly, saved, onSave, onScanAnother, onShare }: Props) {
+  const alerts = useAlerts()
+  const snapshot = alerts.snapshot
+  const counts = snapshot ? snapshotCounts(snapshot) : { nsq: 0, spurious: 0 }
   const hit = outcome.hit
   const flagged = outcome.status === 'flagged' && hit
   const month = hit ? labelMonth(hit.alert.month) : ''
@@ -43,12 +47,12 @@ export function ResultScreen({ draft, outcome, newly, saved, onSave, onScanAnoth
         ['Batch', draft.batch || '—'],
         ['Manufacturer', draft.manufacturer || '—'],
         ['Expiry', draft.exp || '—'],
-        ['Rows checked', snapshot.rowCount === 0 ? 'None loaded' : `${nsqCount} NSQ, ${spuriousCount} spurious`],
+        ['Rows checked', !snapshot || snapshot.rowCount === 0 ? 'None loaded' : `${counts.nsq} NSQ, ${counts.spurious} spurious`],
       ]
 
-  const clearDetail = snapshot.rowCount === 0
+  const clearDetail = !snapshot || snapshot.rowCount === 0
     ? 'No CDSCO rows are loaded in this snapshot, so this is not a full check of every published list.'
-    : `Checked ${draft.batch} against ${nsqCount} NSQ rows and ${spuriousCount} spurious rows in this snapshot.`
+    : `Checked ${draft.batch} against ${counts.nsq} NSQ rows and ${counts.spurious} spurious rows in this snapshot.`
 
   return (
     <div aria-live="polite">

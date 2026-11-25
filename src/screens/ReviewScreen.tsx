@@ -3,6 +3,7 @@ import { Button } from '@astryxdesign/core/Button'
 import { TextInput } from '@astryxdesign/core/TextInput'
 
 import { cycleConfusion, confusionHint } from '../lib/match'
+import { useAlerts } from '../lib/AlertsContext'
 import type { Draft } from '../lib/types'
 
 type Props = {
@@ -12,7 +13,9 @@ type Props = {
 }
 
 export function ReviewScreen({ draft, onChange, onCheck }: Props) {
+  const alerts = useAlerts()
   const hint = confusionHint(draft.batch)
+  const ready = alerts.status === 'ready'
   const set = (key: keyof Draft, value: string) => onChange({ ...draft, [key]: value })
   return (
     <>
@@ -53,7 +56,14 @@ export function ReviewScreen({ draft, onChange, onCheck }: Props) {
       <TextInput label="Mfg" width="100%" value={draft.mfg} onChange={(value) => set('mfg', value)} />
       <TextInput label="Exp" width="100%" value={draft.exp} onChange={(value) => set('exp', value)} />
       {hint ? <Banner status="warning" title="One character looks unsure" description={hint} collapsible={false} /> : null}
-      <Button label="Check against CDSCO lists" variant="primary" width="100%" isDisabled={draft.batch.trim().length < 3} onClick={onCheck} />
+      <Button
+        label={alerts.status === 'loading' ? 'Loading CDSCO lists' : 'Check against CDSCO lists'}
+        variant="primary"
+        width="100%"
+        isLoading={alerts.status === 'loading'}
+        isDisabled={!ready || draft.batch.trim().length < 3}
+        onClick={onCheck}
+      />
     </>
   )
 }

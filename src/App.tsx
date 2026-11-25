@@ -1,13 +1,15 @@
 import { Theme } from '@astryxdesign/core/theme'
 import { useEffect, useMemo, useState } from 'react'
 
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
 import { themes } from '../astryx-themes'
 import { Shell, type Tab } from './components/Shell'
+import { AlertsProvider, useAlerts } from './lib/AlertsContext'
 import { assessCabinetItem, cabinetItemFromDraft, loadCabinet, saveCabinet } from './lib/cabinet'
 import { matchBatch, type MatchOutcome } from './lib/match'
 import { readStrip } from './lib/ocr'
 import { parseStrip, unsureIndexes } from './lib/parse'
-import { alertIndex } from './lib/snapshot'
 import type { CabinetItem, Draft } from './lib/types'
 import { clearHeadline, flaggedHeadline } from './lib/wording'
 import { labelMonth } from './lib/normalize'
@@ -50,6 +52,15 @@ function hashFor(route: Route): string {
 }
 
 export function App() {
+  return (
+    <AlertsProvider>
+      <AppFrame />
+    </AlertsProvider>
+  )
+}
+
+function AppFrame() {
+  const alerts = useAlerts()
   const [theme, setTheme] = useState<'light' | 'dark'>(initialTheme)
   const [route, setRoute] = useState<Route>(() => routeFromHash(window.location.hash))
   const [draft, setDraft] = useState<Draft>(EMPTY)
@@ -66,16 +77,18 @@ export function App() {
   }, [theme])
 
   useEffect(() => {
+    if (alerts.status !== 'ready' || !alerts.index) return
+    const index = alerts.index
     let cancel = false
     loadCabinet().then((loaded) => {
-      const next = loaded.map((item) => assessCabinetItem(item, alertIndex))
+      const next = loaded.map((item) => assessCabinetItem(item, index))
       if (cancel) return
       setItems(next)
       setReady(true)
       if (JSON.stringify(next) !== JSON.stringify(loaded)) void saveCabinet(next)
     }).catch(() => setReady(true))
     return () => { cancel = true }
-  }, [])
+  }, [alerts.status, alerts.index])
 
   useEffect(() => {
     const hash = hashFor(route)
@@ -137,12 +150,13 @@ export function App() {
   }
 
   function checkDraft(next = draft) {
+    if (!alerts.index) return
     const result = matchBatch({
       batch: next.batch,
       product: next.product,
       brand: next.brand,
       manufacturer: next.manufacturer,
-    }, alertIndex)
+    }, alerts.index)
     setOutcome(result)
     setNewly(false)
     setSavedId(null)
@@ -171,12 +185,13 @@ export function App() {
       ocrText: '',
       unsureIndexes: [],
     }
+    if (!alerts.index) return
     const result = matchBatch({
       batch: item.batch,
       product: item.product,
       brand: item.brand,
       manufacturer: item.manufacturer,
-    }, alertIndex)
+    }, alerts.index)
     setDraft(nextDraft)
     setOutcome(result)
     setNewly(item.newlyFlagged)
@@ -213,13 +228,13 @@ export function App() {
         unsureIndexes: [],
       }
     : draft
-  const viewOutcome = activeItem
+  const viewOutcome = activeItem && alerts.index
     ? matchBatch({
         batch: activeItem.batch,
         product: activeItem.product,
         brand: activeItem.brand,
         manufacturer: activeItem.manufacturer,
-      }, alertIndex)
+      }, alerts.index)
     : outcome
 
   return (
@@ -232,6 +247,15 @@ export function App() {
         theme={theme}
         onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
       >
+        {alerts.status === 'loading' ? (
+          <p className="supporting" role="status">Loading the CDSCO list…</p>
+        ) : null}
+        {alerts.status === 'error' ? (
+          <>
+            <Banner status="warning" title="CDSCO list didn't load" description={alerts.message} collapsible={false} />
+            <Button label="Try again" variant="secondary" width="100%" onClick={alerts.reload} />
+          </>
+        ) : null}
         {route.name === 'home' ? (
           <HomeScreen
             theme={theme}

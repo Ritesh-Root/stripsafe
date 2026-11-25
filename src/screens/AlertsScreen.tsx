@@ -3,9 +3,9 @@ import { Pill } from 'lucide-react'
 
 import { StatusBadge } from './HomeScreen'
 import { ThemeButton } from '../components/Shell'
+import { useAlerts } from '../lib/AlertsContext'
 import type { CabinetItem } from '../lib/types'
-import { labelMonth } from '../lib/normalize'
-import { latestListMonth, snapshot } from '../lib/snapshot'
+import { labelMonth, latestMonth } from '../lib/normalize'
 import { newlyFlaggedTitle } from '../lib/wording'
 
 type Props = {
@@ -16,9 +16,11 @@ type Props = {
 }
 
 export function AlertsScreen({ items, theme, onToggleTheme, onOpen }: Props) {
+  const alerts = useAlerts()
+  const snapshot = alerts.snapshot
   const fresh = items.filter((item) => item.newlyFlagged)
   const flagged = items.filter((item) => item.currentStatus === 'flagged' && !item.newlyFlagged)
-  const latest = latestListMonth()
+  const latest = snapshot ? latestMonth(snapshot.rows) : ''
   return (
     <>
       <header className="header">
@@ -27,9 +29,11 @@ export function AlertsScreen({ items, theme, onToggleTheme, onOpen }: Props) {
           <ThemeButton theme={theme} onToggleTheme={onToggleTheme} />
         </div>
         <p className="supporting">
-          {snapshot.rowCount === 0
-            ? 'No CDSCO rows are loaded, so nothing on this phone can be matched to a list yet.'
-            : `${snapshot.rowCount} rows loaded${latest ? `, latest ${labelMonth(latest)}` : ''}.`}
+          {!snapshot
+            ? 'The CDSCO list is still loading.'
+            : snapshot.rowCount === 0
+              ? 'No CDSCO rows are loaded, so nothing on this phone can be matched to a list yet.'
+              : `${snapshot.rowCount} rows loaded${latest ? `, latest ${labelMonth(latest)}` : ''}.`}
         </p>
       </header>
       {fresh.length > 0 ? (

@@ -3,11 +3,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { diffAlerts, mergeAlertRows, normalizeTable, sortedMonths } from '../src/lib/normalize'
+import { serializePublicSnapshot } from '../src/lib/publish'
 import type { AlertRow, AlertSnapshot, DiffSnapshot, FetchError } from '../src/lib/types'
 
 const BASE = process.env.CDSCO_NSQ_BASE_URL?.replace(/\/$/, '') || 'https://cdscoonline.gov.in/CDSCO'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const ALERTS_PATH = path.join(ROOT, 'data', 'alerts.json')
+const PUBLIC_ALERTS_PATH = path.join(ROOT, 'public', 'data', 'alerts.json')
 const DIFF_PATH = path.join(ROOT, 'data', 'diff-latest.json')
 const TIMEOUT_MS = 18_000
 const DELAY_MS_MIN = 1_500
@@ -313,6 +315,8 @@ async function main(): Promise<void> {
     rows: diffRows,
   }
   await writeFile(ALERTS_PATH, `${JSON.stringify(snapshot, null, 2)}\n`)
+  await mkdir(path.dirname(PUBLIC_ALERTS_PATH), { recursive: true })
+  await writeFile(PUBLIC_ALERTS_PATH, serializePublicSnapshot(snapshot))
   await writeFile(DIFF_PATH, `${JSON.stringify(diff, null, 2)}\n`)
   console.log(
     `wrote ${merged.length} rows (${collected.length} fetched this run), ${diffRows.length} new since the previous snapshot, ${successfulKeys.size} month keys refreshed`,

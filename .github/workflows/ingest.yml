@@ -27,6 +27,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # data/alerts.json is the source snapshot. The site fetches a compact
+          # copy that Vite writes to public/data at build time (gitignored).
           git add data/alerts.json data/diff-latest.json
           if git diff --cached --quiet; then
             echo "No CDSCO diff to commit."
