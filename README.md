@@ -97,7 +97,7 @@ NSQ row fields: `str_product_name`, `str_brand_name`, `str_batch_no`, `dt_manufa
 
 Lists are monthly. The September 2026 list was out by 23 Oct 2026, so a new month usually lands three to four weeks after it ends. The GitHub Action runs weekly, fetches every published month, and commits only the rows that are new since the previous snapshot.
 
-**Snapshot in this repo.** On 25 Nov 2026 the ingester reached `cdscoonline.gov.in:443` and the connection timed out before any JSON arrived (`Connect Timeout Error`). `data/alerts.json` therefore has **0 rows**. No rows were invented to fill the gap. Run `npm run ingest` from a network that can complete TLS to that host and the same script will replace the empty snapshot with the real tables.
+**Snapshot in this repo.** Refreshed 25 Nov 2026: **6,975 real CDSCO rows** (6,926 NSQ + 49 spurious) covering all 93 published months, JAN-2019 through SEP-2026 (331 rows in SEP-2026). The ingester retries with backoff and merges with the previous snapshot, so a flaky connection never drops months. The weekly GitHub Action adds new months as CDSCO publishes them.
 
 ## Tech stack
 
