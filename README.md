@@ -4,7 +4,7 @@ Scan a medicine strip and find out whether that exact batch shows up in a CDSCO 
 
 Built for **Parallax Hackathon 2026** (Unstop), Healthcare & Wellbeing track.
 
-**Live demo:** coming soon
+**Live demo:** https://ritesh-root.github.io/stripsafe/
 **Design (Figma):** https://www.figma.com/design/45KcUWIVmqTSxKlolPyWEA
 
 ## The problem
@@ -33,51 +33,44 @@ Results are worded as "this batch appears in CDSCO alert X" or "no CDSCO alert n
 
 ## Architecture
 
+The app is a static PWA. Matching, OCR and the cabinet all run in the browser. GitHub Actions refreshes the CDSCO snapshot and publishes the site. There is no server.
+
 ```mermaid
 flowchart LR
-  subgraph Client["PWA client (React + Astryx)"]
-    CAM["Camera capture"] --> PRE["Foil preprocessing<br/>glare removal, CLAHE, deskew"]
-    PRE --> OCR["OCR + field parser<br/>B.No / Mfg / Exp regex anchors"]
-    OCR --> REVIEW["OCR review screen<br/>user fixes unsure characters"]
-    CAB["My cabinet<br/>(scanned strips)"]
-    CHEM["Chemist mode<br/>invoice upload"]
+  subgraph PWA["Static PWA (Vite, React, Astryx)"]
+    CAM["Camera or image upload"] --> OCR["tesseract.js OCR"]
+    OCR --> PARSE["Field parser<br/>B.No / Batch / Mfg / Exp"]
+    PARSE --> REVIEW["OCR review<br/>fix unsure characters"]
+    REVIEW --> MATCH["Confusion-aware matcher<br/>0/O, 1/I/l, 5/S, 8/B, 2/Z<br/>plus manufacturer and product scores"]
+    MATCH --> RESULT["Result copy<br/>in an alert, or no alert names it yet"]
+    REVIEW --> CAB[("My cabinet<br/>IndexedDB and localStorage")]
+    CAB --> RECHECK["Re-check on load<br/>newly flagged since you scanned"]
+    CHEM["Chemist mode<br/>CSV invoice"] --> MATCH
   end
 
-  subgraph API["Backend (FastAPI)"]
-    MATCH["Matching service<br/>confusion-aware batch edit distance<br/>+ manufacturer / product agreement"]
-    LEDGER[("Watch ledger<br/>cabinets + chemist stock")]
-    INV["Invoice parser<br/>CSV / PDF lines"]
-    SCHED["Alert scheduler<br/>web push / email"]
+  subgraph Data["Committed snapshot"]
+    ALERTS[("data/alerts.json")]
+    DIFF[("data/diff-latest.json")]
   end
 
-  subgraph Ingest["Monthly CDSCO ingester (cron)"]
-    FETCH["Fetch NSQ + spurious lists<br/>cdscoonline.gov.in JSON<br/>+ legacy monthly PDFs"]
-    NORM["Normalize<br/>batch, product, brand, manufacturer"]
-    DIFF["Monthly diff<br/>rows new since last run"]
-    IDX[("Alert index<br/>SQLite")]
+  subgraph Actions["GitHub Actions"]
+    CRON["Weekly cron"] --> ING["Ingester<br/>NSQ and spurious JSON"]
+    ING --> CDSCO["cdscoonline.gov.in/CDSCO"]
+    ING --> ALERTS
+    ING --> DIFF
+    PUSH["Push to main"] --> PAGES["GitHub Pages"]
   end
 
-  REVIEW -->|batch + mfr + drug| MATCH
-  MATCH --> IDX
-  MATCH -->|result| REVIEW
-  REVIEW -->|add to cabinet| LEDGER
-  CAB <--> LEDGER
-  CHEM --> INV --> MATCH
-  INV -->|stock lines| LEDGER
-
-  FETCH --> NORM --> DIFF --> IDX
-  DIFF -->|new rows only| RE["Re-match against<br/>every watched item"]
-  LEDGER --> RE
-  RE -->|hits| SCHED
-  SCHED -->|"a medicine you scanned was flagged"| CAB
-  SCHED -->|quarantine digest| CHEM
+  ALERTS --> MATCH
+  RECHECK --> ALERTS
+  ALERTS --> PAGES
 ```
 
-- **Client scan + OCR:** batch codes are low-contrast inkjet or embossed text on shiny foil, so the image is cleaned up before OCR. Characters the model isn't sure about are highlighted for the user to confirm.
-- **Matching service:** compares the batch with an OCR-confusion map, then checks that manufacturer and product agree, so two different companies that happen to use the same batch code don't collide.
-- **CDSCO list ingester:** pulls each month's NSQ and spurious lists, normalizes them into one SQLite index and keeps a diff of what's new since the last run.
-- **Alert scheduler:** only the new rows are re-matched against every cabinet and stock ledger. Hits become push notifications for households and a quarantine digest for chemists.
-- **Chemist mode:** invoice lines (product, batch, expiry, qty) go through the same matcher and land in the stock ledger, so a future list also catches stock that's already on the shelf.
+- **Scan and OCR:** the phone camera or an uploaded image is read in the browser with tesseract.js. The parser anchors on B.No / Batch, Mfg and Exp. Characters the reader is unsure about can be tapped through their lookalike spellings.
+- **Matcher:** confusion twins cost nothing (0/O, 1/I/l, 5/S, 8/B, 2/Z). A real one-character edit is not enough on its own. Manufacturer and product names have to agree before a near miss is treated as the listed batch. A different company that reused a batch code does not get flagged when both names are present and disagree.
+- **Cabinet:** scans stay on the device in IndexedDB, with a localStorage copy. Opening the app re-checks them against `data/alerts.json`. A batch that was clear at scan time and is named by a later list is marked “newly flagged since you scanned”.
+- **Chemist mode:** a CSV purchase invoice is matched with the same function. Flagged lines become a quarantine list that can be exported as a PDF.
+- **Ingester:** `scripts/ingest.ts` asks the public CDSCO JSON endpoints for every year and month, normalizes the rows, and writes `data/alerts.json` plus `data/diff-latest.json` (rows whose ids were not in the previous file). A failed fetch does not wipe a snapshot that already has rows. The weekly workflow commits the diff. Pages deploys that snapshot with the PWA.
 
 ## Data sources
 
@@ -102,41 +95,45 @@ All CDSCO data is public and free. I checked these on 25 Nov 2026:
 
 NSQ row fields: `str_product_name`, `str_brand_name`, `str_batch_no`, `dt_manufacturing_date`, `dt_expiry_date`, `str_manufactured_by`, `str_nsq_result`, `str_reporting_source`, `str_reported_by_lab_or_state`, `dt_reporting_month_year`. Spurious rows also carry dosage form, route, manufacturer name and category.
 
-Lists are monthly. The September 2026 list was out by 23 Oct 2026, so a new month usually lands three to four weeks after it ends. The ingester polls daily and only acts when a new month shows up. These are undocumented endpoints behind a public page, so the ingester caches raw snapshots and falls back to the legacy PDFs (parsed with pdfplumber) if the portal changes.
+Lists are monthly. The September 2026 list was out by 23 Oct 2026, so a new month usually lands three to four weeks after it ends. The GitHub Action runs weekly, fetches every published month, and commits only the rows that are new since the previous snapshot.
 
-## Tech stack (planned)
+**Snapshot in this repo.** On 25 Nov 2026 the ingester reached `cdscoonline.gov.in:443` and the connection timed out before any JSON arrived (`Connect Timeout Error`). `data/alerts.json` therefore has **0 rows**. No rows were invented to fill the gap. Run `npm run ingest` from a network that can complete TLS to that host and the same script will replace the empty snapshot with the real tables.
+
+## Tech stack
 
 | Layer | Choice | Why |
 | --- | --- | --- |
-| Frontend | React 19 + Vite PWA, [Astryx](https://github.com/meta/astryx) components (`@astryxdesign/core`, `theme-neutral`) | Accessible components, light/dark themes, installable on phones |
-| Camera / OCR (client) | `getUserMedia`, OpenCV.js preprocessing | Glare removal, CLAHE, adaptive threshold, deskew before OCR |
-| OCR (server) | PaddleOCR, Tesseract fallback | Free and offline-capable; good on short alphanumeric codes |
-| Backend | Python 3.12, FastAPI | Simple API for match, cabinet, invoice upload |
-| Matching | rapidfuzz + custom OCR-confusion cost map | Batch edit distance that knows 0/O, 1/I/l, 5/S, 8/B, 2/Z |
-| Ingester | httpx + pdfplumber, cron | Portal JSON first, PDF fallback, monthly diff |
-| Storage | SQLite | One file, enough for the demo and a few years of lists |
-| Alerts | Web Push (VAPID) | No paid SMS or email service needed |
+| App | React 19, TypeScript, Vite, [Astryx](https://github.com/meta/astryx) `@astryxdesign/core` and `theme-neutral` | Accessible components, Figtree, light and dark, the tokens used in the Figma file |
+| PWA | vite-plugin-pwa, web manifest, service worker | Installable on a phone. Static files only, so GitHub Pages can host it |
+| OCR | tesseract.js in the browser | No server and no paid OCR key. Unsure characters are shown for a tap |
+| Matching | Confusion-aware edit distance in `src/lib/match.ts` | 0/O, 1/I/l, 5/S, 8/B, 2/Z cost nothing; manufacturer and product scores block false alarms |
+| Cabinet | IndexedDB, mirrored to localStorage | Stays on the device. Re-checked against the snapshot when the app opens |
+| Ingester | `scripts/ingest.ts` (Node 22 fetch) | Public CDSCO JSON, Latin-1 / windows-1252 decode, weekly diff |
+| Hosting | GitHub Actions + GitHub Pages | `https://ritesh-root.github.io/stripsafe/` |
 
 No paid APIs. Every data source is public.
 
 ## Setup
 
-Coming soon. The app code isn't in the repo yet. The plan:
-
 ```bash
-cp .env.example .env          # fill in local values, never commit .env
-# backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r backend/requirements.txt
-python -m backend.ingest --months 24   # pull the last 24 months of CDSCO lists
-uvicorn backend.main:app --reload
-# frontend
-cd web && npm install && npm run dev
+npm install
+npm test          # parser and matcher
+npm run ingest    # refresh data/alerts.json from CDSCO (needs a network that can reach the portal)
+npm run dev       # http://localhost:5173/stripsafe/
+npm run build     # static site in dist/, base path /stripsafe/
 ```
+
+`npm run lint`, `npm run typecheck`, `npm test` and `npm run build` are what CI runs.
+
+Copy `.env.example` to `.env` only if you need to point the ingester at a different CDSCO base URL. Do not commit `.env`.
+
+### GitHub Pages
+
+The deploy workflow uses `actions/deploy-pages` and runs on every push to `main`. In the repository, set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**. Until that source is selected, the workflow cannot publish the site.
 
 ## Design
 
-Figma file with the user flow, high-fidelity mobile screens (light and dark) and Astryx-mapped components:
+Figma file with the user flow and the mobile screens (light and dark), mapped to Astryx:
 https://www.figma.com/design/45KcUWIVmqTSxKlolPyWEA
 
 ## Disclaimer
