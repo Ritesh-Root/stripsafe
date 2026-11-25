@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-astryx-theme="neutral">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Check a medicine batch against CDSCO quality alerts. StripSafe never calls a medicine safe." />
+    <meta name="theme-color" content="#f1f1f1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1b1b1b" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="StripSafe" />
+    <link rel="icon" href="/stripsafe/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/stripsafe/apple-touch-icon.png" />
+    <title>StripSafe — CDSCO batch check</title>
+    <script>
+      try {
+        var stored = localStorage.getItem('stripsafe.theme')
+        var theme = stored === 'light' || stored === 'dark'
+          ? stored
+          : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        document.documentElement.dataset.theme = theme
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
